@@ -1,0 +1,144 @@
+============================================================ GUIDA
+COMPLETA AI BRANCH GIT
+============================================================
+
+  -----------------------------------
+  1 VISUALIZZARE E CREARE I BRANCH
+  -----------------------------------
+
+Vedere i branch locali: git branch
+
+Vedere tutti i branch (locali + remoti): git branch -a
+
+Creare un nuovo branch (senza spostarsi): git branch nome-branch
+
+Creare un nuovo branch e spostarsi subito su di esso:
+
+Metodo classico: git checkout -b nome-branch
+
+Metodo moderno (consigliato): git switch -c nome-branch
+
+Cambiare branch (spostarsi su uno esistente):
+
+Metodo classico: git checkout nome-branch
+
+Metodo moderno: git switch nome-branch
+
+  -----------------------------
+  2 GESTIONE REMOTA (GitHub)
+  -----------------------------
+
+Inviare un nuovo branch su GitHub (prima volta): git push -u origin
+nome-branch
+
+Nota: -u imposta il tracking, così in futuro basterà: git push
+
+Aggiornare la lista dei branch remoti: git fetch –all
+
+Scaricare un branch creato da altri: git switch -c nome-branch
+origin/nome-branch
+
+  ---------------------------
+  3 MERGING (UNIRE I RAMI)
+  ---------------------------
+
+1.  Spostati sul branch principale: git switch main
+
+2.  Aggiornalo: git pull origin main
+
+3.  Unisci il branch feature: git merge nome-branch-feature
+
+  -----------------------
+  4 ELIMINARE I BRANCH
+  -----------------------
+
+Eliminare un branch locale (solo se già mergiato): git branch -d
+nome-branch
+
+Eliminare un branch locale forzatamente: git branch -D nome-branch
+
+Eliminare un branch su GitHub: git push origin –delete nome-branch
+
+  -------------------------
+  5 CONTROLLI IMPORTANTI
+  -------------------------
+
+Vedere lo stato attuale: git status
+
+Vedere le modifiche non committate: git diff
+
+Vedere lo storico compatto dei commit: git log –oneline –graph –all
+
+  --------------------------
+  6 RISOLUZIONE CONFLITTI
+  --------------------------
+
+Quando Git segnala un conflitto:
+
+1.  Apri il file con conflitto
+
+2.  Troverai sezioni come:
+
+    <<<<<<< HEAD codice branch attuale ======= codice branch
+    unito >>>>>>> nome-branch
+
+3.  Modifica manualmente scegliendo il codice corretto
+
+4.  Poi esegui:
+
+    git add . git commit
+
+  ---------------------------------
+  7 REBASE (CONCETTO IMPORTANTE)
+  ---------------------------------
+
+Il rebase permette di “riscrivere” la storia del branch mantenendo una
+cronologia più pulita.
+
+Esempio: git switch nome-branch git rebase main
+
+Attenzione: Non fare rebase su branch già condivisi con altri
+sviluppatori.
+
+  ---------------------------------------------------------
+  8 WORKFLOW CONSIGLIATO (TEAM / PROGETTI PROFESSIONALI)
+  ---------------------------------------------------------
+
+1.  Creazione feature: git switch -c feature/nome-feature
+
+2.  Lavoro: git add . git commit -m “feat: descrizione chiara”
+
+3.  Pubblicazione: git push -u origin feature/nome-feature
+
+4.  Creazione Pull Request su GitHub
+
+5.  Code review
+
+6.  Merge su main
+
+7.  Eliminazione branch
+
+  ------------------
+  9 BEST PRACTICE
+  ------------------
+
+-   Non lavorare mai direttamente su main
+-   Fai sempre git pull prima di iniziare
+-   Usa nomi chiari per i branch: feature/login fix/navbar-bug
+    refactor/user-service
+-   Elimina i branch dopo il merge
+-   Scrivi commit chiari e descrittivi
+
+  -------------------------
+  10 COMANDI UTILI EXTRA
+  -------------------------
+
+Vedere su che branch ti trovi: git branch –show-current
+
+Rinominare un branch locale: git branch -m nuovo-nome
+
+Annullare modifiche non committate: git restore nome-file
+
+Annullare ultimo commit (mantenendo modifiche): git reset –soft HEAD~1
+
+Annullare ultimo commit (cancellando modifiche): git reset –hard HEAD~1
