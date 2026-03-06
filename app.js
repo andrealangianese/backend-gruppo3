@@ -16,7 +16,7 @@ app.use(express.static('public'));
 
 // creo rotta home dell'app
 
-app.get('/', (req,res) => {
+app.get('/api', (req,res) => {
     res.send('presto sarai la nostra rotta home dei whiskey')
 })
 
