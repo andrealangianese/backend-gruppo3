@@ -14,3 +14,9 @@ app.use(express.static('public'));
 app.get('/', (req,res) => {
     res.send('presto sarai la nostra rotta home dei whiskey')
 })
+
+// creo rotta per la porta in ascolto
+
+app.listen(port ,()=>{
+    console.log(`sono in ascolto della porta ${port}`)
+})
