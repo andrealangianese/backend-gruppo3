@@ -8,3 +8,9 @@ const port = 3000;
 // attivazione cartella public per utilizzo file statici
 
 app.use(express.static('public'));
+
+// creo rotta home dell'app
+
+app.get('/', (req,res) => {
+    res.send('presto sarai la nostra rotta home dei whiskey')
+})
