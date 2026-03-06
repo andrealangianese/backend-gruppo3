@@ -1,8 +1,27 @@
 {
+  "name": "backend-gruppo3",
+  "version": "1.0.0",
+  "description": "'backend gruppo 3'",
+  "homepage": "https://github.com/andrealangianese/backend-gruppo3#readme",
+  "bugs": {
+    "url": "https://github.com/andrealangianese/backend-gruppo3/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andrealangianese/backend-gruppo3.git"
+  },
+  "license": "ISC",
+  "author": "\"gruppo 3\"",
+  "type": "commonjs",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
   "dependencies": {
     "axios": "^1.13.6",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "mysql2": "^3.18.2"
-  }
+  },
+  "devDependencies": {}
 }
