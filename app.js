@@ -2,7 +2,7 @@
 
 const express = require('express');
 const app = express();
-const port = 3000;
+const port = process.env.PORT;
 
 // import dei middlewares per gestione notFound e errorsHandler(status 500)
 
@@ -16,7 +16,7 @@ app.use(express.static('public'));
 
 // creo rotta home dell'app
 
-app.get('/api', (req,res) => {
+app.get('/api', (req, res) => {
     res.send('presto sarai la nostra rotta home dei whiskey')
 })
 
@@ -30,6 +30,6 @@ app.use(errorsHandler)
 
 // creo rotta per la porta in ascolto
 
-app.listen(port ,()=>{
+app.listen(port, () => {
     console.log(`sono in ascolto della porta ${port}`)
 })
