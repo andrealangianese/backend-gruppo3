@@ -4,15 +4,25 @@ const express = require('express');
 const app = express();
 const port = process.env.PORT;
 
+// Import router
+
+const productsRouter = require('./routers/productsRouter');
+
 // import dei middlewares per gestione notFound e errorsHandler(status 500)
 
 const notFound = require('./middlewares/notFound')
 
 const errorsHandler = require('./middlewares/errorsHandler')
 
+const imagePath = require('./middlewares/imagePath');
+
 // attivazione cartella public per utilizzo file statici
 
 app.use(express.static('public'));
+
+app.use(imagePath);
+
+app.use('/api/products', productsRouter);
 
 // creo rotta home dell'app
 
