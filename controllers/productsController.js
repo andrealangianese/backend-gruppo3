@@ -44,4 +44,43 @@ function show(req, res) {
     });
 }
 
-module.exports = { index, show };
+// store dei nostri clienti
+
+function store(req, res){
+
+    const {customer_name, customer_surname, customer_email, shipping_address, billing_address,customer_phone} = req.body
+
+    const sql = `
+        INSERT INTO orders
+        (customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `;
+
+    connection.query(sql,
+        [
+            customer_name,
+            customer_surname,
+            customer_email,
+            shipping_address,
+            billing_address,
+            customer_phone
+        ],
+        (err, results) => {
+
+            if (err){
+                return res.status(500).json({
+                    error: "Database insert failed"
+                });
+            }
+
+            res.status(201).json({
+                message: "Customer created",
+                id: results.insertId
+            });
+
+        }
+    );
+}
+
+
+module.exports = { index, show , store};

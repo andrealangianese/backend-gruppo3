@@ -18,5 +18,9 @@ router.get('/', productsController.index)
 
 router.get('/:id', productsController.show)
 
+// rotta store 
+
+router.post('/customers', productsController.store)
+
 module.exports = router
 

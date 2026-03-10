@@ -20,6 +20,10 @@ const imagePath = require('./middlewares/imagePath');
 
 app.use(express.static('public'));
 
+// abilito il parsing JSON 
+
+app.use(express.json());
+
 app.use(imagePath);
 
 app.use('/api/products', productsRouter);
