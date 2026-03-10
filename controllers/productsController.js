@@ -46,9 +46,9 @@ function show(req, res) {
 
 // store dei nostri clienti
 
-function store(req, res){
+function store(req, res) {
 
-    const {customer_name, customer_surname, customer_email, shipping_address, billing_address,customer_phone} = req.body
+    const { customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone } = req.body
 
     const sql = `
         INSERT INTO orders
@@ -67,7 +67,7 @@ function store(req, res){
         ],
         (err, results) => {
 
-            if (err){
+            if (err) {
                 return res.status(500).json({
                     error: "Database insert failed"
                 });
@@ -83,4 +83,4 @@ function store(req, res){
 }
 
 
-module.exports = { index, show , store};
+module.exports = { index, show, store };
