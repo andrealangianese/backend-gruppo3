@@ -92,7 +92,7 @@ INSERT INTO categories (name) VALUES
 -- INSERT PRODUCTS
 -- =========================
 
-INSERT INTO whiskies (category_id, name, description, price, alcol, origin, img, age, discount, liters, slug, created_at)
+INSERT INTO products (category_id, name, description, price, alcol, origin, img, age, discount, liters, slug, created_at)
 VALUES
 (1,"Blanton's Gold Edition","Bourbon premium del Kentucky prodotto dalla Buffalo Trace Distillery. Viene imbottigliato a mano selezionando singole botti provenienti dal famoso Warehouse H.",210,51.5,"USA","bourbon/blantons-gold-edition.jpg",8,0,0.7,"blantons-gold-edition",NOW()),
 
@@ -106,7 +106,7 @@ VALUES
 
 
 
-INSERT INTO whiskies (category_id, name, description, price, alcol, origin, img, age, discount, liters, slug, created_at)
+INSERT INTO products (category_id, name, description, price, alcol, origin, img, age, discount, liters, slug, created_at)
 VALUES
 (2,"Bushmills 21 Years Old","Irish whiskey tripla distillazione invecchiato 21 anni e affinato in botti di Madeira. Elegante con note di frutta secca e miele.",220,40,"Ireland","irish/bushmills-21-years-old.jpg",21,0,0.7,"bushmills-21-years-old",NOW()),
 
@@ -120,7 +120,7 @@ VALUES
 
 
 
-INSERT INTO whiskies (category_id, name, description, price, alcol, origin, img, age, discount, liters, slug, created_at)
+INSERT INTO products (category_id, name, description, price, alcol, origin, img, age, discount, liters, slug, created_at)
 VALUES
 (3,"Miyagikyo Peated - Nikka Discovery (Release 2021)","Edizione limitata della distilleria Miyagikyo con un carattere torbato delicato. Parte della serie Nikka Discovery.",210,48,"Japan","japanese/miyagikyo-peated.jpg",10,0,0.7,"miyagikyo-peated",NOW()),
 
@@ -134,7 +134,7 @@ VALUES
 
 
 
-INSERT INTO whiskies (category_id, name, description, price, alcol, origin, img, age, discount, liters, slug, created_at)
+INSERT INTO products (category_id, name, description, price, alcol, origin, img, age, discount, liters, slug, created_at)
 VALUES
 (4,"Glenglassaugh 47 Years Old 1968 - Rare Cask Batch 3","Single malt estremamente raro distillato nel 1968 e imbottigliato dopo 47 anni di maturazione.",9500,42,"Scotland","scotch/glenglassaugh-47-years-old.jpg",47,0,0.7,"glenglassaugh-47-years-old",NOW()),
 
