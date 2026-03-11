@@ -79,24 +79,37 @@ function show(req, res) {
 
 // STORE: Salva l'ordine del cliente
 function store(req, res) {
-    const { customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone } = req.body;
+    const { customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone, whiskies } = req.body;
 
-    const sql = `
+    const sqlOrder = `
         INSERT INTO orders
         (customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone)
         VALUES (?, ?, ?, ?, ?, ?)
     `;
 
-    connection.query(sql,
+    connection.query(sqlOrder,
         [customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone],
-        (err, results) => {
-            if (err) {
-                return res.status(500).json({ error: "Database insert failed" });
+        (err, result) => {
+            if (err) return res.status(500).json({ error: "Database insert failed" });
+
+            const orderId = result.insertId;
+
+            // salva prodotti ordinati
+            const orderItems = whiskies.map(w => [orderId, w.whisky_id, w.quantity, w.unitary_price]);
+
+            if (orderItems.length > 0) {
+                connection.query(
+                    'INSERT INTO order_items (order_id, product_id, quantity, unitary_price) VALUES ?',
+                    [orderItems],
+                    (err2) => {
+                        if (err2) return res.status(500).json({ error: "Error saving order items" });
+
+                        res.status(201).json({ message: "Order created", id: orderId });
+                    }
+                );
+            } else {
+                res.status(201).json({ message: "Order created", id: orderId });
             }
-            res.status(201).json({
-                message: "Order created",
-                id: results.insertId
-            });
         }
     );
 }
