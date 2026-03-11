@@ -10,9 +10,13 @@ const productsController = require('../controllers/productsController')
 
 // setto rotte
 
+// rotta categories
+router.get("/categories", productsController.getCategories);
+
 // rotta index
 
 router.get('/', productsController.index)
+
 
 // rotta show
 
@@ -22,8 +26,6 @@ router.get('/:slug', productsController.show)
 
 router.post('/orders', productsController.store)
 
-// rotta categories
-router.get("/categories", productsController.getCategories);
 
 module.exports = router
 
