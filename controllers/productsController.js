@@ -1,23 +1,53 @@
 const connection = require("../data/db");
 
 // funzione di index
+const connection = require("../data/db");
+
 function index(req, res) {
+    // Recuperiamo i parametri dalla query string
+    const { searchTerm, category, promo, sort } = req.query;
 
-    const sql = 'SELECT * FROM products';
+    // Base della query SQL
+    let sql = 'SELECT * FROM products WHERE 1=1';
+    const params = [];
 
-    connection.query(sql, (err, results) => {
+    // Filtro Ricerca
+    if (searchTerm) {
+        sql += ' AND name LIKE ?';
+        params.push(`%${searchTerm}%`);
+    }
+
+    // Filtro Categoria
+    if (category) {
+        sql += ' AND category_id = ?'; // Assicurati di usare l'ID o il nome in base al DB
+        params.push(category);
+    }
+
+    // Filtro Sconti
+    if (promo === 'true') {
+        sql += ' AND discount > 0';
+    }
+
+    // Ordinamento (Sort)
+    if (sort) {
+        switch (sort) {
+            case 'price-asc': sql += ' ORDER BY price ASC'; break;
+            case 'price-desc': sql += ' ORDER BY price DESC'; break;
+            case 'name-asc': sql += ' ORDER BY name ASC'; break;
+            case 'name-desc': sql += ' ORDER BY name DESC'; break;
+            case 'recent': sql += ' ORDER BY created_at DESC'; break;
+        }
+    }
+
+    connection.query(sql, params, (err, results) => {
         if (err) return res.status(500).json({ error: 'Database query failed' });
 
-        const products = results.map(product => {
-            return {
-                ...product,
-                image: req.imagePath + product.image
-            }
-        });
-
+        const products = results.map(product => ({
+            ...product,
+            image: req.imagePath + product.img
+        }));
         res.json(products);
     });
-
 }
 
 // SHOW
