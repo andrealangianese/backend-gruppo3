@@ -37,6 +37,7 @@ function index(req, res) {
             return res.status(500).json({ error: 'Database query failed' });
         }
 
+        // Calcolo prezzo scontato anche se non c'è promo
         const products = results.map(product => {
             const discountedPrice = product.discount > 0
                 ? product.price - (product.price * product.discount / 100)
@@ -63,6 +64,13 @@ function show(req, res) {
         if (productResults.length === 0) return res.status(404).json({ error: 'Product not found' });
 
         const product = productResults[0];
+
+        // Calcolo prezzo scontato anche se non c'è promo
+        product.discountedPrice = product.discount > 0
+            ? product.price - (product.price * product.discount / 100)
+            : product.price;
+
+        // Aggiorno immagine
         product.image = req.imagePath + product.img;
 
         res.json(product);
