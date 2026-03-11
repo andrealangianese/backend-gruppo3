@@ -16,7 +16,7 @@ router.get('/', productsController.index)
 
 // rotta show
 
-router.get('/:id', productsController.show)
+router.get('/:slug', productsController.show)
 
 // rotta store 
 

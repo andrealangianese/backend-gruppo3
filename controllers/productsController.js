@@ -23,11 +23,11 @@ function index(req, res) {
 // SHOW
 function show(req, res) {
 
-    const id = parseInt(req.params.id);
+    const slug = req.params.slug;
 
-    const productSql = 'SELECT * FROM products WHERE id = ?';
+    const productSql = 'SELECT * FROM products WHERE slug = ?';
 
-    connection.query(productSql, [id], (err, productResults) => {
+    connection.query(productSql, [slug], (err, productResults) => {
 
         if (err) return res.status(500).json({ error: 'Database query failed' });
 
