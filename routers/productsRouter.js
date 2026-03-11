@@ -20,7 +20,7 @@ router.get('/:slug', productsController.show)
 
 // rotta store 
 
-router.post('/customers', productsController.store)
+router.post('/orders', productsController.store)
 
 module.exports = router
 

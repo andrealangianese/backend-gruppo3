@@ -1,5 +1,3 @@
-const connection = require("../data/db");
-
 // funzione di index
 const connection = require("../data/db");
 
@@ -104,7 +102,7 @@ function store(req, res) {
             }
 
             res.status(201).json({
-                message: "Customer created",
+                message: "Order created",
                 id: results.insertId
             });
 
