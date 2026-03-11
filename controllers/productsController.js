@@ -40,10 +40,19 @@ function index(req, res) {
     connection.query(sql, params, (err, results) => {
         if (err) return res.status(500).json({ error: 'Database query failed' });
 
-        const products = results.map(product => ({
-            ...product,
-            image: req.imagePath + product.img
-        }));
+        const products = results.map(product => {
+            // Calcolo prezzo scontato
+            const discountedPrice = product.discount > 0
+                ? product.price - (product.price * product.discount / 100)
+                : product.price;
+
+            return {
+                ...product,
+                image: req.imagePath + product.img,
+                discountedPrice  // aggiungiamo il prezzo scontato
+            };
+        });
+
         res.json(products);
     });
 }
@@ -65,7 +74,7 @@ function show(req, res) {
 
         const product = productResults[0];
 
-        product.image = req.imagePath + product.image;
+        product.image = req.imagePath + product.imag;
 
         res.json(product);
 
