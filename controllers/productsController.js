@@ -1,32 +1,26 @@
-// funzione di index
 const connection = require("../data/db");
 
 function index(req, res) {
-    // Recuperiamo i parametri dalla query string
     const { searchTerm, category, promo, sort } = req.query;
 
-    // Base della query SQL
     let sql = 'SELECT * FROM products WHERE 1=1';
     const params = [];
 
-    // Filtro Ricerca
     if (searchTerm) {
         sql += ' AND name LIKE ?';
         params.push(`%${searchTerm}%`);
     }
 
-    // Filtro Categoria
     if (category) {
-        sql += ' AND category_id = ?'; // Assicurati di usare l'ID o il nome in base al DB
+        sql += ' AND category_id = ?';
         params.push(category);
     }
 
-    // Filtro Sconti
-    if (promo === 'true') {
+    // Usiamo == 'true' per essere più flessibili
+    if (promo == 'true') {
         sql += ' AND discount > 0';
     }
 
-    // Ordinamento (Sort)
     if (sort) {
         switch (sort) {
             case 'price-asc': sql += ' ORDER BY price ASC'; break;
@@ -37,19 +31,25 @@ function index(req, res) {
         }
     }
 
+    // LOG DI DEBUG: Controlla il terminale di VS Code quando fai la chiamata!
+    console.log("Query eseguita:", sql);
+    console.log("Parametri:", params);
+
     connection.query(sql, params, (err, results) => {
-        if (err) return res.status(500).json({ error: 'Database query failed' });
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Database query failed' });
+        }
 
         const products = results.map(product => {
-            // Calcolo prezzo scontato
             const discountedPrice = product.discount > 0
                 ? product.price - (product.price * product.discount / 100)
                 : product.price;
 
             return {
                 ...product,
-                image: req.imagePath + product.img,
-                discountedPrice  // aggiungiamo il prezzo scontato
+                image: req.imagePath + product.img, // Corretto: product.img
+                discountedPrice
             };
         });
 
@@ -57,27 +57,19 @@ function index(req, res) {
     });
 }
 
-// SHOW
 function show(req, res) {
-
     const slug = req.params.slug;
-
     const productSql = 'SELECT * FROM products WHERE slug = ?';
 
     connection.query(productSql, [slug], (err, productResults) => {
-
         if (err) return res.status(500).json({ error: 'Database query failed' });
-
-        if (productResults.length === 0) {
-            return res.status(404).json({ error: 'Product not found' });
-        }
+        if (productResults.length === 0) return res.status(404).json({ error: 'Product not found' });
 
         const product = productResults[0];
-
-        product.image = req.imagePath + product.imag;
+        // CORRETTO: product.img (non product.imag o product.image)
+        product.image = req.imagePath + product.img;
 
         res.json(product);
-
     });
 }
 
