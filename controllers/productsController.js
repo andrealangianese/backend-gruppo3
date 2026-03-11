@@ -79,39 +79,30 @@ function show(req, res) {
 
 // STORE: Salva l'ordine del cliente
 function store(req, res) {
-    const { customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone, whiskies } = req.body;
+    const {
+        customer_name, customer_surname, customer_email,
+        shipping_address, billing_address, customer_phone,
+        whiskies // Array di prodotti dal carrello
+    } = req.body;
 
-    const sqlOrder = `
-        INSERT INTO orders
-        (customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone)
-        VALUES (?, ?, ?, ?, ?, ?)
-    `;
+    // Inseriamo l'ordine
+    const orderSql = `INSERT INTO orders (customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')`;
 
-    connection.query(sqlOrder,
-        [customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone],
-        (err, result) => {
-            if (err) return res.status(500).json({ error: "Database insert failed" });
+    connection.query(orderSql, [customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone], (err, results) => {
+        if (err) return res.status(500).json({ error: "Errore inserimento ordine" });
 
-            const orderId = result.insertId;
+        const orderId = results.insertId;
 
-            // salva prodotti ordinati
-            const orderItems = whiskies.map(w => [orderId, w.whisky_id, w.quantity, w.unitary_price]);
+        // Prepariamo l'inserimento dei prodotti (tabella pivot)
+        const values = whiskies.map(item => [orderId, item.whisky_id, item.quantity, item.unitary_price]);
+        const pivotSql = `INSERT INTO orders_product (order_id, product_id, quantity, unitary_price) VALUES ?`;
 
-            if (orderItems.length > 0) {
-                connection.query(
-                    'INSERT INTO order_items (order_id, product_id, quantity, unitary_price) VALUES ?',
-                    [orderItems],
-                    (err2) => {
-                        if (err2) return res.status(500).json({ error: "Error saving order items" });
+        connection.query(pivotSql, [values], (err) => {
+            if (err) return res.status(500).json({ error: "Errore salvataggio dettagli ordine" });
 
-                        res.status(201).json({ message: "Order created", id: orderId });
-                    }
-                );
-            } else {
-                res.status(201).json({ message: "Order created", id: orderId });
-            }
-        }
-    );
+            res.status(201).json({ message: "Ordine completato!", orderId });
+        });
+    });
 }
 
 // GET CATEGORIES: Recupera tutte le categorie per popolare la select nel front-end
