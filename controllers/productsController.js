@@ -44,9 +44,16 @@ function index(req, res) {
                 : product.price;
 
             return {
-                ...product,
+                id: product.id,
+                slug: product.slug,
+                name: product.name,
+                description: product.description,
+                category: product.category,
+                price: product.price,
+                discount: product.discount,
                 image: req.imagePath + product.img,
-                discountedPrice
+                discountedPrice,
+                unitary_price: discountedPrice
             };
         });
 
@@ -65,44 +72,111 @@ function show(req, res) {
 
         const product = productResults[0];
 
-        // Calcolo prezzo scontato anche se non c'è promo
-        product.discountedPrice = product.discount > 0
+        // Calcolo prezzo scontato
+        const discountedPrice = product.discount > 0
             ? product.price - (product.price * product.discount / 100)
             : product.price;
 
-        // Aggiorno immagine
-        product.image = req.imagePath + product.img;
+        const unitary_price = discountedPrice;
 
-        res.json(product);
+        // Costruisco l'oggetto finale da restituire
+        const productData = {
+            id: product.id,
+            slug: product.slug,
+            name: product.name,
+            description: product.description,
+            category: product.category,
+            price: product.price,
+            discount: product.discount,
+            discountedPrice,
+            unitary_price,
+            image: req.imagePath + product.img
+        };
+
+        res.json(productData);
     });
 }
 
 // STORE: Salva l'ordine del cliente
 function store(req, res) {
     const {
-        customer_name, customer_surname, customer_email,
-        shipping_address, billing_address, customer_phone,
-        whiskies // Array di prodotti dal carrello
+        customer_name,
+        customer_surname,
+        customer_email,
+        shipping_address,
+        billing_address,
+        customer_phone,
+        whiskies // array che contiene id e quantità dal frontend
     } = req.body;
 
-    // Inseriamo l'ordine
-    const orderSql = `INSERT INTO orders (customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')`;
+    if (!whiskies || whiskies.length === 0) {
+        return res.status(400).json({ error: "Il carrello è vuoto" });
+    }
 
-    connection.query(orderSql, [customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone], (err, results) => {
-        if (err) return res.status(500).json({ error: "Errore inserimento ordine" });
+    // Inseriamo l'ordine nel DB
+    const orderSql = `
+        INSERT INTO orders 
+        (customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone, status)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending')
+    `;
 
-        const orderId = results.insertId;
+    connection.query(
+        orderSql,
+        [customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone],
+        (err, results) => {
+            if (err) return res.status(500).json({ error: "Errore inserimento ordine" });
 
-        // Prepariamo l'inserimento dei prodotti (tabella pivot)
-        const values = whiskies.map(item => [orderId, item.whisky_id, item.quantity, item.unitary_price]);
-        const pivotSql = `INSERT INTO orders_product (order_id, product_id, quantity, unitary_price) VALUES ?`;
+            const orderId = results.insertId;
 
-        connection.query(pivotSql, [values], (err) => {
-            if (err) return res.status(500).json({ error: "Errore salvataggio dettagli ordine" });
+            // Recuperiamo dal DB i prodotti per calcolare i prezzi
+            const ids = whiskies.map(w => w.whisky_id);
+            connection.query(
+                `SELECT id, price, discount, name FROM products WHERE id IN (?)`,
+                [ids],
+                (err, products) => {
+                    if (err) return res.status(500).json({ error: "Errore recupero prodotti" });
 
-            res.status(201).json({ message: "Ordine completato!", orderId });
-        });
-    });
+                    let total = 0;
+
+                    // Costruiamo array di oggetti chiari per ogni prodotto ordinato
+                    const items = whiskies.map(item => {
+                        const product = products.find(p => p.id === item.whisky_id);
+                        const unitary_price = product.discount > 0
+                            ? product.price - (product.price * product.discount / 100)
+                            : product.price;
+
+                        total += unitary_price * item.quantity;
+
+                        return {
+                            product_id: item.whisky_id,
+                            quantity: item.quantity,
+                            unitary_price
+                        };
+                    });
+
+                    // Prepariamo i valori da inserire nella tabella pivot
+                    const pivotValues = items.map(i => [orderId, i.product_id, i.quantity, i.unitary_price]);
+
+                    // Salviamo i prodotti ordinati nella tabella pivot
+                    connection.query(
+                        `INSERT INTO orders_product (order_id, product_id, quantity, unitary_price) VALUES ?`,
+                        [pivotValues],
+                        (err) => {
+                            if (err) return res.status(500).json({ error: "Errore salvataggio dettagli ordine" });
+
+                            // Restituiamo al frontend totale e dettagli
+                            res.status(201).json({
+                                message: "Ordine completato!",
+                                orderId,
+                                total,
+                                items
+                            });
+                        }
+                    );
+                }
+            );
+        }
+    );
 }
 
 // GET CATEGORIES: Recupera tutte le categorie per popolare la select nel front-end
