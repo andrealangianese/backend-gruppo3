@@ -22,5 +22,8 @@ router.get('/:slug', productsController.show)
 
 router.post('/orders', productsController.store)
 
+// rotta categories
+router.get("/categories", productsController.getCategories);
+
 module.exports = router
 

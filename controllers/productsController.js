@@ -1,5 +1,6 @@
 const connection = require("../data/db");
 
+// INDEX: Recupera i prodotti con filtri e ordinamento
 function index(req, res) {
     const { searchTerm, category, promo, sort } = req.query;
 
@@ -16,7 +17,6 @@ function index(req, res) {
         params.push(category);
     }
 
-    // Usiamo == 'true' per essere più flessibili
     if (promo == 'true') {
         sql += ' AND discount > 0';
     }
@@ -31,10 +31,6 @@ function index(req, res) {
         }
     }
 
-    // LOG DI DEBUG: Controlla il terminale di VS Code quando fai la chiamata!
-    console.log("Query eseguita:", sql);
-    console.log("Parametri:", params);
-
     connection.query(sql, params, (err, results) => {
         if (err) {
             console.error(err);
@@ -48,7 +44,7 @@ function index(req, res) {
 
             return {
                 ...product,
-                image: req.imagePath + product.img, // Corretto: product.img
+                image: req.imagePath + product.img,
                 discountedPrice
             };
         });
@@ -57,6 +53,7 @@ function index(req, res) {
     });
 }
 
+// SHOW: Recupera il singolo prodotto tramite slug
 function show(req, res) {
     const slug = req.params.slug;
     const productSql = 'SELECT * FROM products WHERE slug = ?';
@@ -66,18 +63,15 @@ function show(req, res) {
         if (productResults.length === 0) return res.status(404).json({ error: 'Product not found' });
 
         const product = productResults[0];
-        // CORRETTO: product.img (non product.imag o product.image)
         product.image = req.imagePath + product.img;
 
         res.json(product);
     });
 }
 
-// store dei nostri clienti
-
+// STORE: Salva l'ordine del cliente
 function store(req, res) {
-
-    const { customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone } = req.body
+    const { customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone } = req.body;
 
     const sql = `
         INSERT INTO orders
@@ -86,30 +80,31 @@ function store(req, res) {
     `;
 
     connection.query(sql,
-        [
-            customer_name,
-            customer_surname,
-            customer_email,
-            shipping_address,
-            billing_address,
-            customer_phone
-        ],
+        [customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone],
         (err, results) => {
-
             if (err) {
-                return res.status(500).json({
-                    error: "Database insert failed"
-                });
+                return res.status(500).json({ error: "Database insert failed" });
             }
-
             res.status(201).json({
                 message: "Order created",
                 id: results.insertId
             });
-
         }
     );
 }
 
+// GET CATEGORIES: Recupera tutte le categorie per popolare la select nel front-end
+function getCategories(req, res) {
+    const sql = "SELECT * FROM categories ORDER BY name ASC";
 
-module.exports = { index, show, store };
+    connection.query(sql, (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Database query failed" });
+        }
+        res.json(results);
+    });
+}
+
+// Esporta tutte le funzioni, inclusa la nuova getCategories
+module.exports = { index, show, store, getCategories };
