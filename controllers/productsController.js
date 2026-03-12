@@ -139,10 +139,13 @@ function store(req, res) {
             connection.query(
                 `SELECT id, price, discount, name FROM products WHERE id IN (?)`,
                 [ids],
+                async (err, products) => {
                 (err, products) => {
                     if (err) return res.status(500).json({ error: "Errore recupero prodotti" });
 
                     let total = 0;
+                    // array per stripe
+                    const stripeItems = [];
 
                     // Costruiamo array di oggetti chiari per ogni prodotto ordinato
                     const items = whiskies.map(item => {
@@ -152,7 +155,19 @@ function store(req, res) {
                             : product.price;
 
                         total += unitary_price * item.quantity;
-
+                        
+                        // prepariamo anche i dati per Stripe
+                        stripeItems.push({
+                            price_data: {
+                                currency: 'eur',
+                                product_data: {
+                                    name: product.name,
+                                },
+                                unit_amount: Math.round(unitary_price * 100), // in centesimi
+                            },
+                            quantity: item.quantity,
+                        });
+                        
                         return {
                             product_id: item.whisky_id,
                             quantity: item.quantity,
