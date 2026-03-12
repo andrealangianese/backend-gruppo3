@@ -205,7 +205,7 @@ function store(req, res) {
                                     },
                                 });
 
-                                // Prepariamo il contenuto dell'email
+                                // Prepariamo il contenuto dell'email del compratore
                                 let mailOptions = {
                                     from: '"BoolShop Whisky" <shop@boolshop.it>', // Mittente
                                     to: customer_email, // Destinatario (preso dal body della richiesta)
@@ -224,8 +224,31 @@ function store(req, res) {
                                 // Inviamo l'email
                                 let info = await transporter.sendMail(mailOptions);
 
+                                // Prepariamo il contenuto dell'email del venditore
+                                let vendorMailOptions = {
+                                    from: '"BoolShop Whisky" <shop@boolshop.it>',
+                                    to: "venditore@boolshop.it", // email del venditore
+                                    subject: `Nuovo ordine ricevuto #${orderId}`,
+                                    html: `
+                                        <div style="font-family:sans-serif;">
+                                            <h2>Nuovo ordine ricevuto</h2>
+                                            <p><strong>Ordine:</strong> #${orderId}</p>
+                                            <h3>Dati cliente</h3>
+                                            <p>${customer_name} ${customer_surname}</p>
+                                            <p>Email: ${customer_email}</p>
+                                            <p>Telefono: ${customer_phone}</p>
+                                            <h3>Indirizzo spedizione</h3>
+                                            <p>${shipping_address}</p>
+                                            <p>Controlla il pannello admin per i dettagli.</p>
+                                        </div>
+                                       `};
+
+                                let vendorInfo = await transporter.sendMail(vendorMailOptions);
+
                                 // Mostra il link nel terminale per vedere l'email finta
-                                console.log("Email inviata! Vedi l'anteprima qui: %s", nodemailer.getTestMessageUrl(info));
+                                console.log("Email compratore inviata!: %s", nodemailer.getTestMessageUrl(info));
+
+                                console.log("Email venditore inviata!: %s", nodemailer.getTestMessageUrl(vendorInfo));
 
                                 // Risposta al frontend con l'URL per il redirect
                                 return res.status(201).json({
