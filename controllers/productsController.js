@@ -167,7 +167,7 @@ function store(req, res) {
                             },
                             quantity: item.quantity,
                         });
-                        
+
                         return {
                             product_id: item.whisky_id,
                             quantity: item.quantity,
@@ -182,9 +182,17 @@ function store(req, res) {
                     connection.query(
                         `INSERT INTO orders_product (order_id, product_id, quantity, unitary_price) VALUES ?`,
                         [pivotValues],
-                        (err) => {
+                        async (err) => {
                             if (err) return res.status(500).json({ error: "Errore salvataggio dettagli ordine" });
 
+                            // creiamo la sessione di pagamento con Stripe 
+                            const session = await stripe.checkout.sessions.create({
+                                payment_method_types: ['card'],
+                                line_items: stripeItems,
+                                mode: 'payment',
+                                success_url: 'http://localhost:5173/success?session_id={CHECKOUT_SESSION_ID}',
+                                cancel_url: 'http://localhost:5173/cart',
+                            });
                             // Restituiamo al frontend totale e dettagli
                             res.status(201).json({
                                 message: "Ordine completato!",
