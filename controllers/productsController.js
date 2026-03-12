@@ -2,6 +2,8 @@ const connection = require("../data/db");
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
+const nodemailer = require('nodemailer');
+
 // INDEX: Recupera i prodotti con filtri e ordinamento
 function index(req, res) {
     const { searchTerm, category, promo, sort } = req.query;
@@ -121,7 +123,7 @@ function store(req, res) {
         return res.status(400).json({ error: "Il carrello è vuoto" });
     }
 
-    // 1. Salviamo l'intestazione dell'ordine
+    // Salviamo l'intestazione dell'ordine
     const orderSql = `
         INSERT INTO orders 
         (customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone, status)
@@ -137,7 +139,7 @@ function store(req, res) {
             const orderId = results.insertId;
             const ids = whiskies.map(w => w.whisky_id);
 
-            // 2. Recuperiamo i prezzi reali dal database
+            // Recuperiamo i prezzi reali dal database
             connection.query(
                 `SELECT id, price, discount, name FROM products WHERE id IN (?)`,
                 [ids],
@@ -170,7 +172,7 @@ function store(req, res) {
 
                     const pivotValues = items.map(i => [orderId, i.product_id, i.quantity, i.unitary_price]);
 
-                    // 3. Salviamo i dettagli nella tabella pivot
+                    // Salviamo i dettagli nella tabella pivot
                     connection.query(
                         `INSERT INTO orders_product (order_id, product_id, quantity, unitary_price) VALUES ?`,
                         [pivotValues],
@@ -178,7 +180,7 @@ function store(req, res) {
                             if (err) return res.status(500).json({ error: "Errore salvataggio dettagli ordine" });
 
                             try {
-                                // 4. Creiamo la sessione Stripe
+                                // Creiamo la sessione Stripe
                                 const session = await stripe.checkout.sessions.create({
                                     payment_method_types: ['card'],
                                     line_items: stripeItems,
@@ -187,15 +189,56 @@ function store(req, res) {
                                     cancel_url: 'http://localhost:5173/cart',
                                 });
 
-                                // 5. Risposta al frontend con l'URL per il redirect
-                                res.status(201).json({
-                                    message: "Sessione creata!",
-                                    url: session.url,
-                                    orderId
+                                // --- LOGICA INVIO EMAIL ---
+
+                                //Creiamo un account di test con Ethereal
+                                let testAccount = await nodemailer.createTestAccount();
+
+                                // Configuriamo il Transporter
+                                let transporter = nodemailer.createTransport({
+                                    host: "smtp.ethereal.email",
+                                    port: 587,
+                                    secure: false, // true per 465, false per altre porte
+                                    auth: {
+                                        user: testAccount.user, // Generato automaticamente
+                                        pass: testAccount.pass, // Generato automaticamente
+                                    },
                                 });
-                            } catch (stripeError) {
-                                console.error("Stripe Error:", stripeError);
-                                res.status(500).json({ error: "Errore Stripe" });
+
+                                // Prepariamo il contenuto dell'email
+                                let mailOptions = {
+                                    from: '"BoolShop Whisky" <shop@boolshop.it>', // Mittente
+                                    to: customer_email, // Destinatario (preso dal body della richiesta)
+                                    subject: `Conferma Ordine #${orderId}`,
+                                    text: `Ciao ${customer_name}, grazie per il tuo acquisto!`,
+                                    html: `
+                                        <div style="font-family: sans-serif; color: #333;">
+                                            <h1>Grazie per il tuo ordine, ${customer_name}!</h1>
+                                            <p>Siamo felici che tu abbia scelto i nostri prodotti.</p>
+                                            <p><strong>Riepilogo Ordine:</strong> #${orderId}</p>
+                                            <p>Appena il pagamento sarà confermato, spediremo a: <em>${shipping_address}</em></p>
+                                        </div>
+                                    `
+                                };
+
+                                // Inviamo l'email
+                                let info = await transporter.sendMail(mailOptions);
+
+                                // Mostra il link nel terminale per vedere l'email finta
+                                console.log("Email inviata! Vedi l'anteprima qui: %s", nodemailer.getTestMessageUrl(info));
+
+                                // Risposta al frontend con l'URL per il redirect
+                                return res.status(201).json({
+                                    message: "Ordine salvato, email inviata e sessione Stripe creata!",
+                                    url: session.url,
+                                    orderId: orderId,
+                                    previewEmail: nodemailer.getTestMessageUrl(info)
+                                });
+
+                            } catch (error) { // Rinominato in 'error' per coerenza col console.log sotto
+                                console.error("Errore finale (Stripe/Email):", error);
+                                // Usiamo return per assicurarci che la funzione si fermi qui
+                                return res.status(500).json({ error: "Errore durante la finalizzazione dell'ordine" });
                             }
                         }
                     );
