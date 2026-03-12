@@ -1,5 +1,7 @@
 const connection = require("../data/db");
 
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
 // INDEX: Recupera i prodotti con filtri e ordinamento
 function index(req, res) {
     const { searchTerm, category, promo, sort } = req.query;
@@ -112,14 +114,14 @@ function store(req, res) {
         shipping_address,
         billing_address,
         customer_phone,
-        whiskies // array che contiene id e quantità dal frontend
+        whiskies
     } = req.body;
 
     if (!whiskies || whiskies.length === 0) {
         return res.status(400).json({ error: "Il carrello è vuoto" });
     }
 
-    // Inseriamo l'ordine nel DB
+    // 1. Salviamo l'intestazione dell'ordine
     const orderSql = `
         INSERT INTO orders 
         (customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone, status)
@@ -133,37 +135,28 @@ function store(req, res) {
             if (err) return res.status(500).json({ error: "Errore inserimento ordine" });
 
             const orderId = results.insertId;
-
-            // Recuperiamo dal DB i prodotti per calcolare i prezzi
             const ids = whiskies.map(w => w.whisky_id);
+
+            // 2. Recuperiamo i prezzi reali dal database
             connection.query(
                 `SELECT id, price, discount, name FROM products WHERE id IN (?)`,
                 [ids],
-                async (err, products) => {
                 (err, products) => {
                     if (err) return res.status(500).json({ error: "Errore recupero prodotti" });
 
-                    let total = 0;
-                    // array per stripe
                     const stripeItems = [];
-
-                    // Costruiamo array di oggetti chiari per ogni prodotto ordinato
                     const items = whiskies.map(item => {
                         const product = products.find(p => p.id === item.whisky_id);
                         const unitary_price = product.discount > 0
                             ? product.price - (product.price * product.discount / 100)
                             : product.price;
 
-                        total += unitary_price * item.quantity;
-                        
-                        // prepariamo anche i dati per Stripe
+                        // Prepariamo i dati per Stripe
                         stripeItems.push({
                             price_data: {
                                 currency: 'eur',
-                                product_data: {
-                                    name: product.name,
-                                },
-                                unit_amount: Math.round(unitary_price * 100), // in centesimi
+                                product_data: { name: product.name },
+                                unit_amount: Math.round(unitary_price * 100),
                             },
                             quantity: item.quantity,
                         });
@@ -175,31 +168,35 @@ function store(req, res) {
                         };
                     });
 
-                    // Prepariamo i valori da inserire nella tabella pivot
                     const pivotValues = items.map(i => [orderId, i.product_id, i.quantity, i.unitary_price]);
 
-                    // Salviamo i prodotti ordinati nella tabella pivot
+                    // 3. Salviamo i dettagli nella tabella pivot
                     connection.query(
                         `INSERT INTO orders_product (order_id, product_id, quantity, unitary_price) VALUES ?`,
                         [pivotValues],
-                        async (err) => {
+                        async (err) => { // 'async' è fondamentale qui per usare 'await' sotto
                             if (err) return res.status(500).json({ error: "Errore salvataggio dettagli ordine" });
 
-                            // creiamo la sessione di pagamento con Stripe 
-                            const session = await stripe.checkout.sessions.create({
-                                payment_method_types: ['card'],
-                                line_items: stripeItems,
-                                mode: 'payment',
-                                success_url: 'http://localhost:5173/success?session_id={CHECKOUT_SESSION_ID}',
-                                cancel_url: 'http://localhost:5173/cart',
-                            });
-                            // Restituiamo al frontend totale e dettagli
-                            res.status(201).json({
-                                message: "Ordine completato!",
-                                orderId,
-                                total,
-                                items
-                            });
+                            try {
+                                // 4. Creiamo la sessione Stripe
+                                const session = await stripe.checkout.sessions.create({
+                                    payment_method_types: ['card'],
+                                    line_items: stripeItems,
+                                    mode: 'payment',
+                                    success_url: `http://localhost:5173/success?order_id=${orderId}`,
+                                    cancel_url: 'http://localhost:5173/cart',
+                                });
+
+                                // 5. Risposta al frontend con l'URL per il redirect
+                                res.status(201).json({
+                                    message: "Sessione creata!",
+                                    url: session.url,
+                                    orderId
+                                });
+                            } catch (stripeError) {
+                                console.error("Stripe Error:", stripeError);
+                                res.status(500).json({ error: "Errore Stripe" });
+                            }
                         }
                     );
                 }
