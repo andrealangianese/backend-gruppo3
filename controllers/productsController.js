@@ -116,14 +116,21 @@ function store(req, res) {
         shipping_address,
         billing_address,
         customer_phone,
-        whiskies
+        whiskies,
+        termsAccepted
     } = req.body;
 
+    // Controllo carrello vuoto
     if (!whiskies || whiskies.length === 0) {
         return res.status(400).json({ error: "Il carrello è vuoto" });
     }
 
-    // --- NUOVA VARIABILE PER IL TOTALE ---
+    // Controllo termini accettati
+    if (!termsAccepted) {
+        return res.status(400).json({ error: "Accetta i termini e condizioni per procedere con l'ordine" });
+    }
+
+    // Variabile per il prezzo totale
     let totalPrice = 0;
 
     // Salviamo l'intestazione dell'ordine
