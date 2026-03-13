@@ -123,6 +123,9 @@ function store(req, res) {
         return res.status(400).json({ error: "Il carrello è vuoto" });
     }
 
+    // --- NUOVA VARIABILE PER IL TOTALE ---
+    let totalPrice = 0;
+
     // Salviamo l'intestazione dell'ordine
     const orderSql = `
         INSERT INTO orders 
@@ -153,6 +156,9 @@ function store(req, res) {
                             ? product.price - (product.price * product.discount / 100)
                             : product.price;
 
+                        // --- AGGIUNTO CALCOLO TOTALE ---
+                        totalPrice += unitary_price * item.quantity;
+
                         // Prepariamo i dati per Stripe
                         stripeItems.push({
                             price_data: {
@@ -176,8 +182,17 @@ function store(req, res) {
                     connection.query(
                         `INSERT INTO orders_product (order_id, product_id, quantity, unitary_price) VALUES ?`,
                         [pivotValues],
-                        async (err) => { // 'async' è fondamentale qui per usare 'await' sotto
+                        async (err) => {
                             if (err) return res.status(500).json({ error: "Errore salvataggio dettagli ordine" });
+
+                            // --- AGGIUNTO UPDATE TOTAL_PRICE NELL'ORDINE ---
+                            connection.query(
+                                `UPDATE orders SET total_price = ? WHERE id = ?`,
+                                [totalPrice, orderId],
+                                (err) => {
+                                    if (err) console.error("Errore aggiornamento total_price:", err);
+                                }
+                            );
 
                             try {
                                 // Creiamo la sessione Stripe
@@ -189,48 +204,35 @@ function store(req, res) {
                                     cancel_url: 'http://localhost:5173/cart',
                                 });
 
-                                // --- LOGICA INVIO EMAIL ---
-
-                                //Creiamo un account di test con Ethereal
+                                // --- INVIO EMAIL ---
                                 let testAccount = await nodemailer.createTestAccount();
-
-                                // Configuriamo il Transporter
                                 let transporter = nodemailer.createTransport({
                                     host: "smtp.ethereal.email",
                                     port: 587,
-                                    secure: false, // true per 465, false per altre porte
-                                    auth: {
-                                        user: testAccount.user, // Generato automaticamente
-                                        pass: testAccount.pass, // Generato automaticamente
-                                    },
+                                    secure: false,
+                                    auth: { user: testAccount.user, pass: testAccount.pass },
                                 });
 
-                                // Prepariamo il contenuto dell'email del compratore
                                 let mailOptions = {
-                                    from: '"BoolShop Whisky" <shop@boolshop.it>', // Mittente
-                                    to: customer_email, // Destinatario (preso dal body della richiesta)
+                                    from: '"BoolShop Whisky" <shop@boolshop.it>',
+                                    to: customer_email,
                                     subject: `Conferma Ordine #${orderId}`,
                                     text: `Ciao ${customer_name}, grazie per il tuo acquisto!`,
-                                    html: `
-                                        <div style="font-family: sans-serif; color: #333;">
+                                    html: `<div style="font-family: sans-serif; color: #333;">
                                             <h1>Grazie per il tuo ordine, ${customer_name}!</h1>
                                             <p>Siamo felici che tu abbia scelto i nostri prodotti.</p>
                                             <p><strong>Riepilogo Ordine:</strong> #${orderId}</p>
                                             <p>Appena il pagamento sarà confermato, spediremo a: <em>${shipping_address}</em></p>
-                                        </div>
-                                    `
+                                        </div>`
                                 };
 
-                                // Inviamo l'email
                                 let info = await transporter.sendMail(mailOptions);
 
-                                // Prepariamo il contenuto dell'email del venditore
                                 let vendorMailOptions = {
                                     from: '"BoolShop Whisky" <shop@boolshop.it>',
-                                    to: "venditore@boolshop.it", // email del venditore
+                                    to: "venditore@boolshop.it",
                                     subject: `Nuovo ordine ricevuto #${orderId}`,
-                                    html: `
-                                        <div style="font-family:sans-serif;">
+                                    html: `<div style="font-family:sans-serif;">
                                             <h2>Nuovo ordine ricevuto</h2>
                                             <p><strong>Ordine:</strong> #${orderId}</p>
                                             <h3>Dati cliente</h3>
@@ -240,17 +242,14 @@ function store(req, res) {
                                             <h3>Indirizzo spedizione</h3>
                                             <p>${shipping_address}</p>
                                             <p>Controlla il pannello admin per i dettagli.</p>
-                                        </div>
-                                       `};
+                                        </div>`
+                                };
 
                                 let vendorInfo = await transporter.sendMail(vendorMailOptions);
 
-                                // Mostra il link nel terminale per vedere l'email finta
                                 console.log("Email compratore inviata!: %s", nodemailer.getTestMessageUrl(info));
-
                                 console.log("Email venditore inviata!: %s", nodemailer.getTestMessageUrl(vendorInfo));
 
-                                // Risposta al frontend con l'URL per il redirect
                                 return res.status(201).json({
                                     message: "Ordine salvato, email inviata e sessione Stripe creata!",
                                     url: session.url,
@@ -258,9 +257,8 @@ function store(req, res) {
                                     previewEmail: nodemailer.getTestMessageUrl(info)
                                 });
 
-                            } catch (error) { // Rinominato in 'error' per coerenza col console.log sotto
+                            } catch (error) {
                                 console.error("Errore finale (Stripe/Email):", error);
-                                // Usiamo return per assicurarci che la funzione si fermi qui
                                 return res.status(500).json({ error: "Errore durante la finalizzazione dell'ordine" });
                             }
                         }
