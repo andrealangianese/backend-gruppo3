@@ -282,5 +282,5 @@ function getCategories(req, res) {
     });
 }
 
-// Esporta tutte le funzioni, inclusa la nuova getCategories
+// Esporta tutte le funzioni
 module.exports = { index, show, store, getCategories };
