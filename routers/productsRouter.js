@@ -13,6 +13,9 @@ const productsController = require('../controllers/productsController')
 // rotta categories
 router.get("/categories", productsController.getCategories);
 
+// conferma ordine dopo pagamento con stripe
+router.get("/orders/confirm", productsController.confirmOrder);
+
 // rotta index
 
 router.get('/', productsController.index)
