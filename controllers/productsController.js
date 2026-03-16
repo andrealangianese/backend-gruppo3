@@ -11,28 +11,37 @@ function index(req, res) {
     let sql = 'SELECT * FROM products WHERE 1=1';
     const params = [];
 
+    // ricerca  per nome e descrizione
     if (searchTerm) {
-        sql += ' AND name LIKE ?';
-        params.push(`%${searchTerm}%`);
+        sql += ' AND (name LIKE ? OR description LIKE ?)';
+        const nameDescSearch = `%${searchTerm}%`;
+        params.push(nameDescSearch, nameDescSearch);
     }
 
+    // filtro per categoria
     if (category) {
         sql += ' AND category_id = ?';
         params.push(category);
     }
 
+    // filtro per promozione
     if (promo == 'true') {
         sql += ' AND discount > 0';
     }
 
-    if (sort) {
-        switch (sort) {
-            case 'price-asc': sql += ' ORDER BY price ASC'; break;
-            case 'price-desc': sql += ' ORDER BY price DESC'; break;
-            case 'name-asc': sql += ' ORDER BY name ASC'; break;
-            case 'name-desc': sql += ' ORDER BY name DESC'; break;
-            case 'recent': sql += ' ORDER BY created_at DESC'; break;
-        }
+    // ordinamento secondo preferenze
+    const sortMapping ={
+        'price-asc': 'price ASC',
+        'price-desc': 'price DESC',
+        'name-asc': 'name ASC',
+        'name-desc': 'name DESC',
+        'recent': 'created_at DESC'
+    }
+    if (sort && sortMapping[sort]) {
+        sql += ` ORDER BY ${sortMapping[sort]}`;
+    } else {
+        // ordinamento di default se non specificato o non valido
+        sql += ' ORDER BY id ASC';
     }
 
     connection.query(sql, params, (err, results) => {
