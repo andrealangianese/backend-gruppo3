@@ -30,7 +30,7 @@ function index(req, res) {
     }
 
     // ordinamento secondo preferenze
-    const sortMapping ={
+    const sortMapping = {
         'price-asc': 'price ASC',
         'price-desc': 'price DESC',
         'name-asc': 'name ASC',
@@ -244,61 +244,17 @@ function store(req, res) {
                                     payment_method_types: ['card'],
                                     line_items: stripeItems,
                                     mode: 'payment',
-                                    success_url: `http://localhost:5173/success?order_id=${orderId}`,
+                                    // url punta al backend, non al frontend
+                                    success_url: `http://localhost:3000/api/products/orders/confirm?order_id=${orderId}`,
                                     cancel_url: 'http://localhost:5173/cart',
                                 });
 
-                                // --- INVIO EMAIL ---
-                                let testAccount = await nodemailer.createTestAccount();
-                                let transporter = nodemailer.createTransport({
-                                    host: "smtp.ethereal.email",
-                                    port: 587,
-                                    secure: false,
-                                    auth: { user: testAccount.user, pass: testAccount.pass },
-                                });
-
-                                let mailOptions = {
-                                    from: '"BoolShop Whisky" <shop@boolshop.it>',
-                                    to: customer_email,
-                                    subject: `Conferma Ordine #${orderId}`,
-                                    text: `Ciao ${customer_name}, grazie per il tuo acquisto!`,
-                                    html: `<div style="font-family: sans-serif; color: #333;">
-                                            <h1>Grazie per il tuo ordine, ${customer_name}!</h1>
-                                            <p>Siamo felici che tu abbia scelto i nostri prodotti.</p>
-                                            <p><strong>Riepilogo Ordine:</strong> #${orderId}</p>
-                                            <p>Appena il pagamento sarà confermato, spediremo a: <em>${shipping_address}</em></p>
-                                        </div>`
-                                };
-
-                                let info = await transporter.sendMail(mailOptions);
-
-                                let vendorMailOptions = {
-                                    from: '"BoolShop Whisky" <shop@boolshop.it>',
-                                    to: "venditore@boolshop.it",
-                                    subject: `Nuovo ordine ricevuto #${orderId}`,
-                                    html: `<div style="font-family:sans-serif;">
-                                            <h2>Nuovo ordine ricevuto</h2>
-                                            <p><strong>Ordine:</strong> #${orderId}</p>
-                                            <h3>Dati cliente</h3>
-                                            <p>${customer_name} ${customer_surname}</p>
-                                            <p>Email: ${customer_email}</p>
-                                            <p>Telefono: ${customer_phone}</p>
-                                            <h3>Indirizzo spedizione</h3>
-                                            <p>${shipping_address}</p>
-                                            <p>Controlla il pannello admin per i dettagli.</p>
-                                        </div>`
-                                };
-
-                                let vendorInfo = await transporter.sendMail(vendorMailOptions);
-
-                                console.log("Email compratore inviata!: %s", nodemailer.getTestMessageUrl(info));
-                                console.log("Email venditore inviata!: %s", nodemailer.getTestMessageUrl(vendorInfo));
+                                // l'invio della mail avverrà dopo la funzione confirmOrder
 
                                 return res.status(201).json({
                                     message: "Ordine salvato, email inviata e sessione Stripe creata!",
                                     url: session.url,
                                     orderId: orderId,
-                                    previewEmail: nodemailer.getTestMessageUrl(info)
                                 });
 
                             } catch (error) {
@@ -311,6 +267,128 @@ function store(req, res) {
             );
         }
     );
+}
+
+async function confirmOrder(req, res) {
+    const { order_id } = req.query;
+
+    if (!order_id) return res.status(400).send("ID ordine mancante");
+
+    // 1. QUERY CON JOIN: Recuperiamo ordine e dettagli prodotti in un colpo solo
+    const sql = `
+        SELECT o.*, op.quantity, op.unitary_price, p.name as product_name
+        FROM orders o
+        JOIN orders_product op ON o.id = op.order_id
+        JOIN products p ON op.product_id = p.id
+        WHERE o.id = ?
+    `;
+
+    connection.query(sql, [order_id], async (err, results) => {
+        if (err || results.length === 0) return res.status(404).send("Ordine non trovato");
+
+        const order = results[0];
+
+        // 2. COSTRUZIONE RIGHE TABELLA PRODOTTI (HTML)
+        let itemsHtml = "";
+        results.forEach(item => {
+            itemsHtml += `
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;">${item.product_name}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">x${item.quantity}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">${(item.unitary_price * item.quantity).toFixed(2)} €</td>
+                </tr>
+            `;
+        });
+
+        // Controllo per evitare doppie operazioni se l'utente ricarica la pagina
+        if (order.status === 'paid') {
+            return res.redirect(`http://localhost:5173/success?order_id=${order_id}`);
+        }
+
+        try {
+            // Aggiorna lo stato nel DB
+            connection.query(`UPDATE orders SET status = 'paid' WHERE id = ?`, [order_id]);
+
+            // Configurazione mail di test
+            let testAccount = await nodemailer.createTestAccount();
+            let transporter = nodemailer.createTransport({
+                host: "smtp.ethereal.email",
+                port: 587,
+                secure: false,
+                auth: { user: testAccount.user, pass: testAccount.pass },
+            });
+
+            // --- 3. MAIL PER IL CLIENTE ---
+            const customerMailOptions = {
+                from: '"Heritage Whisky Reserve" <shop@heritagewhisky.it>',
+                to: order.customer_email,
+                subject: `Conferma Pagamento Ordine #${order_id}`,
+                html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+                    <div style="background-color: #1a1a1a; color: #d4af37; padding: 20px; text-align: center;">
+                        <h1 style="margin: 0; font-size: 24px; text-transform: uppercase;">Heritage Whisky</h1>
+                    </div>
+                    <div style="padding: 20px; color: #333;">
+                        <h2>Grazie per il tuo acquisto, ${order.customer_name}!</h2>
+                        <p>Il pagamento per l'ordine <strong>#${order_id}</strong> è stato ricevuto.</p>
+                        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                            <thead>
+                                <tr style="background-color: #f8f8f8;">
+                                    <th style="text-align: left; padding: 10px;">Whisky</th>
+                                    <th style="text-align: center; padding: 10px;">Q.tà</th>
+                                    <th style="text-align: right; padding: 10px;">Prezzo</th>
+                                </tr>
+                            </thead>
+                            <tbody>${itemsHtml}</tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="2" style="padding: 10px; text-align: right;"><strong>Totale:</strong></td>
+                                    <td style="padding: 10px; text-align: right; font-weight: bold; color: #d4af37;">${order.total_price} €</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                        <p>Spediremo a: <strong>${order.shipping_address}</strong></p>
+                    </div>
+                </div>`
+            };
+
+            // --- 4. MAIL PER IL VENDITORE ---
+            const vendorMailOptions = {
+                from: '"Sistema Heritage" <system@heritagewhisky.it>',
+                to: "admin@heritagewhisky.it",
+                subject: `💰 Vendita Effettuata! Ordine #${order_id}`,
+                html: `
+                <div style="font-family: sans-serif; padding: 20px; border: 2px solid #28a745; border-radius: 10px;">
+                    <h2 style="color: #28a745;">Nuovo ordine pronto per la spedizione</h2>
+                    <p><strong>Cliente:</strong> ${order.customer_name} ${order.customer_surname}</p>
+                    <table style="width: 100%; margin: 15px 0; border-top: 1px solid #ccc;">
+                        ${itemsHtml}
+                    </table>
+                    <p><strong>Incasso totale:</strong> ${order.total_price} €</p>
+                    <p><strong>Destinazione:</strong> ${order.shipping_address}</p>
+                    <p><strong>Telefono:</strong> ${order.customer_phone}</p>
+                </div>`
+            };
+
+            // Esecuzione invii
+            let infoCliente = await transporter.sendMail(customerMailOptions);
+            let infoVenditore = await transporter.sendMail(vendorMailOptions);
+
+            // Recupero link anteprima
+            const previewC = nodemailer.getTestMessageUrl(infoCliente);
+            const previewV = nodemailer.getTestMessageUrl(infoVenditore);
+
+            console.log("Link Cliente:", previewC);
+            console.log("Link Venditore:", previewV);
+
+            // 5. REDIRECT AL FRONTEND: Passiamo entrambi i link nell'URL
+            res.redirect(`http://localhost:5173/success?order_id=${order_id}&url_c=${encodeURIComponent(previewC)}&url_v=${encodeURIComponent(previewV)}`);
+
+        } catch (error) {
+            console.error("Errore nel processo di conferma:", error);
+            res.redirect(`http://localhost:5173/success?order_id=${order_id}&mail_error=true`);
+        }
+    });
 }
 
 // GET CATEGORIES: Recupera tutte le categorie per popolare la select nel front-end
@@ -327,4 +405,4 @@ function getCategories(req, res) {
 }
 
 // Esporta tutte le funzioni
-module.exports = { index, show, store, getCategories };
+module.exports = { index, show, store, getCategories, confirmOrder };
