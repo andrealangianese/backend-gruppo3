@@ -9,8 +9,8 @@ const nodemailer = require('nodemailer');
 function index(req, res) {
     const { searchTerm, category, promo, sort } = req.query;
 
-    // Base della query SQL: 1=1 è un trucco per aggiungere "AND" dinamicamente
-    let sql = 'SELECT * FROM products WHERE 1=1';
+    // Query base dei prodotti con calcolo del prezzo scontato per l'ordinamento
+    let sql = 'SELECT *, (price - (price * discount / 100)) AS discounted_price FROM products WHERE 1=1';
     const params = [];
 
     // Filtro di ricerca testuale (Nome o Descrizione)
@@ -33,8 +33,8 @@ function index(req, res) {
 
     // Gestione dell'ordinamento tramite mappatura sicura (evita SQL Injection)
     const sortMapping = {
-        'price-asc': 'price ASC',
-        'price-desc': 'price DESC',
+        'price-asc': 'discounted_price ASC',
+        'price-desc': 'discounted_price DESC',
         'name-asc': 'name ASC',
         'name-desc': 'name DESC',
         'recent': 'created_at DESC'
