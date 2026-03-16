@@ -120,6 +120,34 @@ function store(req, res) {
         termsAccepted
     } = req.body;
 
+    // validazioni tutti dati be
+
+    const errors = [];
+    if (!customer_name || customer_name.trim().length < 4) {
+        errors.push("Il nome è obbligatorio e deve avere almeno 4 caratteri");
+    }
+    if (!customer_surname || customer_surname.trim().length < 4) {
+        errors.push("Il cognome è obbligatorio e deve avere almeno 4 caratteri");
+    }
+    if (!customer_email || !customer_email.includes('@')) {
+        errors.push("L'email è obbligatoria e deve essere valida");
+    }
+    if (!shipping_address || shipping_address.trim().length < 8) {
+        errors.push("L'indirizzo di spedizione è obbligatorio e deve avere almeno 8 caratteri");
+    }
+    if (!billing_address || billing_address.trim().length < 8) {
+        errors.push("L'indirizzo di fatturazione è obbligatorio e deve avere almeno 8 caratteri");
+    }
+    if (!customer_phone || customer_phone.trim().length < 7) {
+        errors.push("Il numero di telefono è obbligatorio, deve avere almeno 7 caratteri e deve essere valido");
+    }
+
+    if (errors.length > 0) {
+        return res.status(400).json({
+            success: false,
+            errors: errors
+        });
+    }
     // Controllo carrello vuoto
     if (!whiskies || whiskies.length === 0) {
         return res.status(400).json({ error: "Il carrello è vuoto" });
