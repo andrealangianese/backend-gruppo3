@@ -355,7 +355,11 @@ async function confirmOrder(req, res) {
             // --- 4. MAIL PER IL VENDITORE ---
             const vendorMailOptions = {
                 from: '"Sistema Heritage" <system@heritagewhisky.it>',
+<<<<<<< HEAD
                 to: "admin@heritagewhisky.it",
+=======
+                to: "admin@heritagewhisky.it", 
+>>>>>>> e6543dc276f68bdea9e676abf9e9983564f0500d
                 subject: `💰 Vendita Effettuata! Ordine #${order_id}`,
                 html: `
                 <div style="font-family: sans-serif; padding: 20px; border: 2px solid #28a745; border-radius: 10px;">
@@ -405,4 +409,8 @@ function getCategories(req, res) {
 }
 
 // Esporta tutte le funzioni
+<<<<<<< HEAD
 module.exports = { index, show, store, getCategories, confirmOrder };
+=======
+module.exports = { index, show, store, getCategories , confirmOrder };
+>>>>>>> e6543dc276f68bdea9e676abf9e9983564f0500d
