@@ -2,10 +2,7 @@ const connection = require("../data/db");
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const nodemailer = require('nodemailer');
 
-/*
-  INDEX: Recupera l'elenco dei prodotti dal database.
-  Supporta filtri per nome/descrizione, categoria, promozioni e ordinamento.
- */
+/* INDEX: Recupera l'elenco dei prodotti dal database */
 function index(req, res) {
     const { searchTerm, category, promo, sort } = req.query;
 
@@ -13,14 +10,14 @@ function index(req, res) {
     let sql = 'SELECT *, (price - (price * discount / 100)) AS discounted_price FROM products WHERE 1=1';
     const params = [];
 
-    // Filtro di ricerca testuale (Nome o Descrizione)
+    // Filtro di ricerca testuale
     if (searchTerm) {
         sql += ' AND (name LIKE ? OR description LIKE ?)';
         const nameDescSearch = `%${searchTerm}%`;
         params.push(nameDescSearch, nameDescSearch);
     }
 
-    // Filtro per ID Categoria
+    // Filtro per ID categoria
     if (category) {
         sql += ' AND category_id = ?';
         params.push(category);
@@ -31,7 +28,7 @@ function index(req, res) {
         sql += ' AND discount > 0';
     }
 
-    // Gestione dell'ordinamento tramite mappatura sicura (evita SQL Injection)
+    // Gestione dell'ordinamento
     const sortMapping = {
         'price-asc': 'discounted_price ASC',
         'price-desc': 'discounted_price DESC',
@@ -70,9 +67,7 @@ function index(req, res) {
     });
 }
 
-/*
-  SHOW: Recupera i dettagli di un singolo prodotto tramite il suo "slug" (URL friendly).
- */
+/* SHOW: Recupera i dettagli di un singolo prodotto tramite slug */
 function show(req, res) {
     const slug = req.params.slug;
     const productSql = 'SELECT * FROM products WHERE slug = ?';
@@ -95,11 +90,7 @@ function show(req, res) {
     });
 }
 
-/*
-  STORE: Gestisce la creazione dell'ordine.
-  1. Valida i dati. 2. Salva l'ordine. 3. Salva i prodotti nel dettaglio (pivot). 
-  4. Calcola spedizione e totale. 5. Crea la sessione di pagamento Stripe.
- */
+/* STORE: Gestisce la creazione dell'ordine */
 function store(req, res) {
     const {
         customer_name, customer_surname, customer_email,
@@ -107,7 +98,7 @@ function store(req, res) {
         whiskies, termsAccepted
     } = req.body;
 
-    // --- Validazione Dati ---
+    // Validazione dati
     const errors = [];
     if (!customer_name || customer_name.trim().length < 4) errors.push("Nome non valido");
     if (!customer_surname || customer_surname.trim().length < 4) errors.push("Cognome non valido");
@@ -117,9 +108,15 @@ function store(req, res) {
     if (!termsAccepted) errors.push("Accetta i termini e condizioni");
     if (!whiskies || whiskies.length === 0) return res.status(400).json({ error: "Carrello vuoto" });
 
+    whiskies.forEach(item => {
+        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+            errors.push("Quantità prodotto non valida");
+        }
+    });
+
     if (errors.length > 0) return res.status(400).json({ success: false, errors });
 
-    // --- 1. Creazione record Ordine ---
+    // Creazione record ordine 
     const orderSql = `INSERT INTO orders (customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')`;
 
     connection.query(orderSql, [customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone], (err, results) => {
@@ -128,7 +125,7 @@ function store(req, res) {
         const orderId = results.insertId;
         const ids = whiskies.map(w => w.whisky_id);
 
-        // --- 2. Recupero prezzi reali dal DB (Sicurezza: non ci fidiamo del prezzo inviato dal front-end) ---
+        // Recupero prezzi reali dal DB
         connection.query(`SELECT id, price, discount, name FROM products WHERE id IN (?)`, [ids], (err, products) => {
             if (err) return res.status(500).json({ error: "Errore recupero prodotti" });
 
@@ -158,9 +155,9 @@ function store(req, res) {
                 pivotValues.push([orderId, item.whisky_id, item.quantity, unitary_price]);
             });
 
-            // --- 3. Calcolo Spedizione ---
-            const SHIPPING_COST = 100.00; // Esempio 100€
-            const FREE_SHIPPING_THRESHOLD = 1000.00; // Gratis sopra i 1000€
+            // Calcolo Spedizione 
+            const SHIPPING_COST = 100.00;
+            const FREE_SHIPPING_THRESHOLD = 1000.00;
             let shippingFee = totalPrice >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
             const finalOrderTotal = totalPrice + shippingFee;
 
@@ -175,16 +172,16 @@ function store(req, res) {
                 });
             }
 
-            // --- 4. Salvataggio Prodotti Ordinati (Pivot) ---
+            // Salvataggio Prodotti Ordinati (Pivot)
             connection.query(`INSERT INTO orders_product (order_id, product_id, quantity, unitary_price) VALUES ?`, [pivotValues], (err) => {
                 if (err) return res.status(500).json({ error: "Errore salvataggio dettagli prodotti" });
 
-                // --- 5. Aggiornamento Totale Finale nell'Ordine ---
+                // Aggiornamento Totale Finale nell'Ordine 
                 connection.query(`UPDATE orders SET total_price = ? WHERE id = ?`, [finalOrderTotal, orderId], async (err) => {
                     if (err) return res.status(500).json({ error: "Errore aggiornamento totale" });
 
                     try {
-                        // --- 6. Creazione Sessione Stripe ---
+                        // Creazione Sessione Stripe
                         const session = await stripe.checkout.sessions.create({
                             payment_method_types: ['card'],
                             line_items: stripeItems,
@@ -203,10 +200,8 @@ function store(req, res) {
     });
 }
 
-/*
-  CONFIRM ORDER: Chiamata da Stripe dopo il successo.
-  Aggiorna lo stato in 'paid' e invia le email a cliente e venditore.
- */
+/* CONFIRM ORDER: Chiamata da Stripe dopo il successo.
+  Aggiorna lo stato in 'paid' e invia le email a cliente e venditore */
 async function confirmOrder(req, res) {
     const { order_id } = req.query;
     if (!order_id) return res.status(400).send("ID ordine mancante");
@@ -251,7 +246,7 @@ async function confirmOrder(req, res) {
 
             const shippingFee = order.total_price - subtotalProducts;
 
-            // --- 1. EMAIL PER IL CLIENTE ---
+            // EMAIL PER IL CLIENTE 
             const mailCliente = {
                 from: '"Heritage Whisky" <shop@heritagewhisky.it>',
                 to: order.customer_email,
@@ -259,7 +254,7 @@ async function confirmOrder(req, res) {
                 html: `<h1>Grazie ${order.customer_name}!</h1><p>Pagamento ricevuto per l'ordine #${order_id}.</p><table border="1">${itemsHtml}</table><p>Totale pagato: ${order.total_price}€</p>`
             };
 
-            // --- 2. EMAIL PER IL VENDITORE ---
+            // EMAIL PER IL VENDITORE 
             const mailVenditore = {
                 from: '"Sistema Shop" <bot@heritagewhisky.it>',
                 to: 'admin@heritagewhisky.it', // Email del titolare
@@ -271,7 +266,7 @@ async function confirmOrder(req, res) {
             let infoC = await transporter.sendMail(mailCliente);
             const previewC = nodemailer.getTestMessageUrl(infoC);
 
-            // Invio mail venditore (Mancava questo!)
+            // Invio mail venditore
             let infoV = await transporter.sendMail(mailVenditore);
             const previewV = nodemailer.getTestMessageUrl(infoV);
 
@@ -283,9 +278,7 @@ async function confirmOrder(req, res) {
     });
 }
 
-/*
-  GET CATEGORIES: Recupera l'elenco delle categorie per i filtri del front-end.
- */
+/* Funzione che recupera l'elenco delle categorie per i filtri del front-end */
 function getCategories(req, res) {
     connection.query("SELECT * FROM categories ORDER BY name ASC", (err, results) => {
         if (err) return res.status(500).json({ error: "Database query failed" });
