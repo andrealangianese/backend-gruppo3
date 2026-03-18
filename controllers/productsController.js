@@ -108,6 +108,12 @@ function store(req, res) {
         whiskies, termsAccepted
     } = req.body;
 
+    // Log dei dati ricevuti per debug
+    console.log("BODY:", req.body);
+
+    // Se l'indirizzo di fatturazione è vuoto, usiamo quello di spedizione
+    const finalBillingAddress = billing_address || shipping_address;
+
     // Validazione dati
     const errors = [];
     if (!customer_name || customer_name.trim().length < 4) errors.push("Nome non valido");
@@ -124,90 +130,130 @@ function store(req, res) {
         }
     });
 
-    if (errors.length > 0) return res.status(400).json({ success: false, errors });
+    // Se ci sono errori, li restituiamo al client
+    if (errors.length > 0) {
+        console.log("ERRORI:", errors);
+        return res.status(400).json({ success: false, errors });
+    }
 
     // Creazione record ordine 
-    const orderSql = `INSERT INTO orders (customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')`;
-
-    connection.query(orderSql, [customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone], (err, results) => {
-        if (err) return res.status(500).json({ error: "Errore inserimento ordine" });
-
-        const orderId = results.insertId;
-        const ids = whiskies.map(w => w.whisky_id);
-
-        // Recupero prezzi reali dal DB
-        connection.query(`SELECT id, price, discount, name FROM products WHERE id IN (?)`, [ids], (err, products) => {
-            if (err) return res.status(500).json({ error: "Errore recupero prodotti" });
-
-            let totalPrice = 0;
-            const stripeItems = [];
-            const pivotValues = [];
-
-            whiskies.forEach(item => {
-                const product = products.find(p => p.id === item.whisky_id);
-                const unitary_price = product.discount > 0
-                    ? product.price - (product.price * product.discount / 100)
-                    : product.price;
-
-                totalPrice += unitary_price * item.quantity;
-
-                // Dati per Stripe
-                stripeItems.push({
-                    price_data: {
-                        currency: 'eur',
-                        product_data: { name: product.name },
-                        unit_amount: Math.round(unitary_price * 100), // Stripe usa i centesimi
-                    },
-                    quantity: item.quantity,
-                });
-
-                // Dati per tabella pivot orders_product
-                pivotValues.push([orderId, item.whisky_id, item.quantity, unitary_price]);
-            });
-
-            // Calcolo Spedizione 
-            const SHIPPING_COST = 100.00;
-            const FREE_SHIPPING_THRESHOLD = 1000.00;
-            let shippingFee = totalPrice >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
-            const finalOrderTotal = totalPrice + shippingFee;
-
-            if (shippingFee > 0) {
-                stripeItems.push({
-                    price_data: {
-                        currency: 'eur',
-                        product_data: { name: 'Spese di spedizione' },
-                        unit_amount: Math.round(shippingFee * 100),
-                    },
-                    quantity: 1,
-                });
+    const orderSql = `
+        INSERT INTO orders 
+        (customer_name, customer_surname, customer_email, shipping_address, billing_address, customer_phone, status) 
+        VALUES (?, ?, ?, ?, ?, ?, 'pending')
+    `;
+    // Log della query e dei parametri per debug
+    connection.query(
+        orderSql,
+        [
+            customer_name,
+            customer_surname,
+            customer_email,
+            shipping_address,
+            finalBillingAddress,
+            customer_phone
+        ],
+        (err, results) => {
+            if (err) {
+                console.error("ERRORE ORDINE:", err);
+                return res.status(500).json({ error: "Errore inserimento ordine" });
             }
 
-            // Salvataggio Prodotti Ordinati (Pivot)
-            connection.query(`INSERT INTO orders_product (order_id, product_id, quantity, unitary_price) VALUES ?`, [pivotValues], (err) => {
-                if (err) return res.status(500).json({ error: "Errore salvataggio dettagli prodotti" });
+            const orderId = results.insertId;
+            const ids = whiskies.map(w => w.whisky_id);
 
-                // Aggiornamento Totale Finale nell'Ordine 
-                connection.query(`UPDATE orders SET total_price = ? WHERE id = ?`, [finalOrderTotal, orderId], async (err) => {
-                    if (err) return res.status(500).json({ error: "Errore aggiornamento totale" });
+            // Recupero prezzi reali dal DB
+            connection.query(`SELECT id, price, discount, name FROM products WHERE id IN (?)`, [ids], (err, products) => {
+                if (err) return res.status(500).json({ error: "Errore recupero prodotti" });
 
-                    try {
-                        // Creazione Sessione Stripe
-                        const session = await stripe.checkout.sessions.create({
-                            payment_method_types: ['card'],
-                            line_items: stripeItems,
-                            mode: 'payment',
-                            success_url: `http://localhost:3000/api/products/orders/confirm?order_id=${orderId}`,
-                            cancel_url: 'http://localhost:5173/cart',
-                        });
+                let totalPrice = 0;
+                const stripeItems = [];
+                const pivotValues = [];
 
-                        res.status(201).json({ url: session.url, orderId });
-                    } catch (error) {
-                        res.status(500).json({ error: "Errore Stripe" });
+                // Calcolo totale ordine, preparazione dati per Stripe e tabella pivot
+                whiskies.forEach(item => {
+                    const product = products.find(p => p.id === item.whisky_id);
+
+                    if (!product) {
+                        return res.status(400).json({ error: "Prodotto non trovato" });
                     }
+
+                    // Calcolo prezzo unitario considerando eventuali sconti
+                    const unitary_price = product.discount > 0
+                        ? product.price - (product.price * product.discount / 100)
+                        : product.price;
+
+                    // Calcolo totale parziale
+                    totalPrice += unitary_price * item.quantity;
+
+                    // Dati per Stripe
+                    stripeItems.push({
+                        price_data: {
+                            currency: 'eur',
+                            product_data: { name: product.name },
+                            unit_amount: Math.round(unitary_price * 100),
+                        },
+                        quantity: item.quantity,
+                    });
+
+                    // Dati per tabella pivot orders_product
+                    pivotValues.push([orderId, item.whisky_id, item.quantity, unitary_price]);
                 });
+
+                // Calcolo Spedizione 
+                const SHIPPING_COST = 100.00;
+                const FREE_SHIPPING_THRESHOLD = 1000.00;
+                let shippingFee = totalPrice >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST;
+                const finalOrderTotal = totalPrice + shippingFee;
+
+                if (shippingFee > 0) {
+                    stripeItems.push({
+                        price_data: {
+                            currency: 'eur',
+                            product_data: { name: 'Spese di spedizione' },
+                            unit_amount: Math.round(shippingFee * 100),
+                        },
+                        quantity: 1,
+                    });
+                }
+
+                // Salvataggio Prodotti Ordinati (Pivot)
+                connection.query(
+                    `INSERT INTO orders_product (order_id, product_id, quantity, unitary_price) VALUES ?`,
+                    [pivotValues],
+                    (err) => {
+                        if (err) return res.status(500).json({ error: "Errore salvataggio dettagli prodotti" });
+
+                        // Aggiornamento Totale Finale nell'Ordine 
+                        connection.query(
+                            `UPDATE orders SET total_price = ? WHERE id = ?`,
+                            [finalOrderTotal, orderId],
+                            async (err) => {
+                                if (err) return res.status(500).json({ error: "Errore aggiornamento totale" });
+
+                                try {
+                                    // Log degli items preparati per Stripe
+                                    console.log("STRIPE ITEMS:", stripeItems);
+
+                                    // Creazione Sessione Stripe
+                                    const session = await stripe.checkout.sessions.create({
+                                        payment_method_types: ['card'],
+                                        line_items: stripeItems,
+                                        mode: 'payment',
+                                        success_url: `http://localhost:3000/api/products/orders/confirm?order_id=${orderId}`,
+                                        cancel_url: 'http://localhost:5173/cart',
+                                    });
+
+                                    res.status(201).json({ url: session.url, orderId });
+
+                                } catch (error) {
+                                    console.error("ERRORE STRIPE:", error); // 🔥 FIX
+                                    res.status(500).json({ error: "Errore Stripe" });
+                                }
+                            });
+                    });
             });
         });
-    });
 }
 
 /* CONFIRM ORDER: Chiamata da Stripe dopo il successo.
@@ -250,15 +296,30 @@ async function confirmOrder(req, res) {
                 from: '"Heritage Whisky" <shop@heritagewhisky.it>',
                 to: order.customer_email,
                 subject: `Conferma Ordine #${order_id}`,
-                html: `<h1>Grazie ${order.customer_name}!</h1><p>Pagamento ricevuto.</p><table border="1">${itemsHtml}</table><p>Totale: ${order.total_price}€</p>`
-            };
+                html: `
+                        <h1>Grazie ${order.customer_name}!</h1>
+                        <p>Pagamento ricevuto.</p>
+                        <h3>Indirizzo di spedizione:</h3>
+                        <p>${order.shipping_address}</p>
+                        <h3>Indirizzo di fatturazione:</h3>
+                        <p>${order.billing_address}</p>
+                        <table border="1">${itemsHtml}</table>
+                        <p>Totale: ${order.total_price}€</p>
+                    `};
 
             const mailVenditore = {
                 from: '"Sistema Shop" <bot@heritagewhisky.it>',
                 to: 'admin@heritagewhisky.it',
                 subject: `Nuovo Ordine #${order_id}`,
-                html: `<h1>Nuovo ordine da ${order.customer_name}</h1><table border="1">${itemsHtml}</table>`
-            };
+                html: `
+                        <h1>Nuovo ordine da ${order.customer_name}</h1>
+                        <p><strong>Email:</strong> ${order.customer_email}</p>
+                        <h3>Indirizzo di spedizione:</h3>
+                        <p>${order.shipping_address}</p>
+                        <h3>Indirizzo di fatturazione:</h3>
+                        <p>${order.billing_address}</p>
+                        <table border="1">${itemsHtml}</table>
+                    `};
 
             // Invio effettivo
             let infoC = await transporter.sendMail(mailCliente);
