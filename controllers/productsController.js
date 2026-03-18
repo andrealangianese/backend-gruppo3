@@ -319,6 +319,7 @@ async function confirmOrder(req, res) {
                         <h3>Indirizzo di fatturazione:</h3>
                         <p>${order.billing_address}</p>
                         <table border="1">${itemsHtml}</table>
+                        <p>Totale: ${order.total_price}€</p>
                     `};
 
             // Invio effettivo
