@@ -2,6 +2,16 @@ const connection = require("../data/db");
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const nodemailer = require('nodemailer');
 
+// CONFIGURAZIONE MAIL FISSA
+const transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: process.env.EMAIL_PORT,
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
+
 /* INDEX: Recupera l'elenco dei prodotti dal database */
 function index(req, res) {
     const { searchTerm, category, promo, sort } = req.query;
@@ -221,58 +231,48 @@ async function confirmOrder(req, res) {
 
         // Se l'ordine è già pagato (es. refresh pagina), redirect diretto
         if (order.status === 'paid') {
-            res.redirect(`http://localhost:5173/success?order_id=${order_id}&url_c=${encodeURIComponent(previewC)}&url_v=${encodeURIComponent(previewV)}`);
+            return res.redirect(`http://localhost:5173/success?order_id=${order_id}`);
         }
 
         try {
             // Segna come pagato nel database
             connection.query(`UPDATE orders SET status = 'paid' WHERE id = ?`, [order_id]);
 
-            // Setup Mail (Ethereal per test)
-            let testAccount = await nodemailer.createTestAccount();
-            let transporter = nodemailer.createTransport({
-                host: "smtp.ethereal.email", port: 587, secure: false,
-                auth: { user: testAccount.user, pass: testAccount.pass },
-            });
-
             // Costruzione tabella prodotti per Email
-            let subtotalProducts = 0;
             let itemsHtml = "";
             results.forEach(item => {
                 const rowTotal = item.unitary_price * item.quantity;
-                subtotalProducts += rowTotal;
                 itemsHtml += `<tr><td>${item.product_name}</td><td>x${item.quantity}</td><td>${rowTotal.toFixed(2)}€</td></tr>`;
             });
 
-            const shippingFee = order.total_price - subtotalProducts;
-
-            // EMAIL PER IL CLIENTE 
+            // Definiamo le mail
             const mailCliente = {
                 from: '"Heritage Whisky" <shop@heritagewhisky.it>',
                 to: order.customer_email,
                 subject: `Conferma Ordine #${order_id}`,
-                html: `<h1>Grazie ${order.customer_name}!</h1><p>Pagamento ricevuto per l'ordine #${order_id}.</p><table border="1">${itemsHtml}</table><p>Totale pagato: ${order.total_price}€</p>`
+                html: `<h1>Grazie ${order.customer_name}!</h1><p>Pagamento ricevuto.</p><table border="1">${itemsHtml}</table><p>Totale: ${order.total_price}€</p>`
             };
 
-            // EMAIL PER IL VENDITORE 
             const mailVenditore = {
                 from: '"Sistema Shop" <bot@heritagewhisky.it>',
-                to: 'admin@heritagewhisky.it', // Email del titolare
-                subject: `Nuovo Ordine Ricevuto! #${order_id}`,
-                html: `<h1>Nuovo ordine da ${order.customer_name} ${order.customer_surname}</h1><p>Indirizzo: ${order.shipping_address}</p><table border="1">${itemsHtml}</table><p>Incasso totale: ${order.total_price}€</p>`
+                to: 'admin@heritagewhisky.it',
+                subject: `Nuovo Ordine #${order_id}`,
+                html: `<h1>Nuovo ordine da ${order.customer_name}</h1><table border="1">${itemsHtml}</table>`
             };
 
-            // Invio mail cliente
+            // Invio effettivo
             let infoC = await transporter.sendMail(mailCliente);
-            const previewC = nodemailer.getTestMessageUrl(infoC);
-
-            // Invio mail venditore
             let infoV = await transporter.sendMail(mailVenditore);
+
+            // Generiamo i link per i bottoni di debug (funzionano con Ethereal)
+            const previewC = nodemailer.getTestMessageUrl(infoC);
             const previewV = nodemailer.getTestMessageUrl(infoV);
 
-            // Redirect al front-end con link anteprima mail
+            // Redirect con i link
             res.redirect(`http://localhost:5173/success?order_id=${order_id}&url_c=${encodeURIComponent(previewC)}&url_v=${encodeURIComponent(previewV)}`);
+
         } catch (error) {
+            console.error("Errore invio mail:", error);
             res.redirect(`http://localhost:5173/success?order_id=${order_id}&mail_error=true`);
         }
     });
