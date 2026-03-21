@@ -67,7 +67,8 @@ function index(req, res) {
 
             return {
                 ...product,
-                image: req.imagePath + product.img, // Costruisce l'URL completo dell'immagine
+                // FIX: Aggiunto .toLowerCase() per far corrispondere il DB alle cartelle minuscole su Vercel
+                image: req.imagePath + product.img.toLowerCase(), 
                 discountedPrice,
                 unitary_price: discountedPrice
             };
@@ -95,7 +96,8 @@ function show(req, res) {
             ...product,
             discountedPrice,
             unitary_price: discountedPrice,
-            image: req.imagePath + product.img
+            // FIX: Aggiunto .toLowerCase() qui per la singola immagine
+            image: req.imagePath + product.img.toLowerCase()
         });
     });
 }
@@ -240,8 +242,9 @@ function store(req, res) {
                                         payment_method_types: ['card'],
                                         line_items: stripeItems,
                                         mode: 'payment',
-                                        success_url: `http://localhost:3000/api/products/orders/confirm?order_id=${orderId}`,
-                                        cancel_url: 'http://localhost:5173/cart',
+                                        // FIX: Sostituiti localhost con variabili d'ambiente per Vercel
+                                        success_url: `${process.env.BACKEND_URL}/api/products/orders/confirm?order_id=${orderId}`,
+                                        cancel_url: `${process.env.FRONTEND_URL}/cart`,
                                     });
 
                                     res.status(201).json({ url: session.url, orderId });
@@ -276,8 +279,9 @@ async function confirmOrder(req, res) {
         const order = results[0];
 
         // Se l'ordine è già pagato (es. refresh pagina), redirect diretto
+        // FIX: Redirect dinamico al frontend
         if (order.status === 'paid') {
-            return res.redirect(`http://localhost:5173/success?order_id=${order_id}`);
+            return res.redirect(`${process.env.FRONTEND_URL}/success?order_id=${order_id}`);
         }
 
         try {
@@ -331,11 +335,13 @@ async function confirmOrder(req, res) {
             const previewV = nodemailer.getTestMessageUrl(infoV);
 
             // Redirect con i link
-            res.redirect(`http://localhost:5173/success?order_id=${order_id}&url_c=${encodeURIComponent(previewC)}&url_v=${encodeURIComponent(previewV)}`);
+            // FIX: Redirect dinamico al frontend
+            res.redirect(`${process.env.FRONTEND_URL}/success?order_id=${order_id}&url_c=${encodeURIComponent(previewC)}&url_v=${encodeURIComponent(previewV)}`);
 
         } catch (error) {
             console.error("Errore invio mail:", error);
-            res.redirect(`http://localhost:5173/success?order_id=${order_id}&mail_error=true`);
+            // FIX: Redirect dinamico in caso di errore
+            res.redirect(`${process.env.FRONTEND_URL}/success?order_id=${order_id}&mail_error=true`);
         }
     });
 }
