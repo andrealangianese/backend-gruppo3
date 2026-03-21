@@ -11,7 +11,7 @@ const cors = require("cors");
 
 // middleware per il CORS
 app.use(cors({
-    origin: 'http://localhost:5173'
+    origin: 'https://project-work-frontend-team3.vercel.app'
 }));
 
 // Import router
